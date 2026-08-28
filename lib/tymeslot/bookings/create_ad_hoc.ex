@@ -8,10 +8,19 @@ defmodule Tymeslot.Bookings.CreateAdHoc do
   optional video room provisioning.
   """
 
+  # `check_calendar_conflicts/2` logs the calendar it could not read before
+  # booking anyway. 1.18.1 dropped this module's own `require Logger` along with
+  # its last Logger call, so the availability check brings it back rather than
+  # relying on one it does not own.
+  require Logger
+
   alias Ecto.UUID
   alias Tymeslot.Bookings.Activation
   alias Tymeslot.Bookings.CalendarJobs
+  alias Tymeslot.Bookings.Policy
+  alias Tymeslot.Bookings.Validation
   alias Tymeslot.Infrastructure.AvailabilityCache
+  alias Tymeslot.Integrations.Calendar.Events, as: CalendarEvents
   alias Tymeslot.Locales
   alias Tymeslot.Meetings.Guests
   alias Tymeslot.Meetings.Scheduling
@@ -33,16 +42,32 @@ defmodule Tymeslot.Bookings.CreateAdHoc do
           optional(:guest_emails) => [String.t()]
         }
 
-  @spec execute(params()) ::
-          {:ok, Tymeslot.Meetings.MeetingSchema.t()} | {:error, String.t() | :time_conflict}
-  def execute(params) do
+  @typedoc """
+  `:enforce_availability` applies the organiser's notice period, booking horizon
+  and connected-calendar conflicts before booking. It defaults to `false`: the
+  dashboard calendar books over anything, because the organiser is looking at
+  the grid while they decide. A caller that cannot see the grid asks for `true`.
+
+  `:meeting_type` is the type the booking is made against, and only the
+  availability check reads it: `Policy.scheduling_config/2` resolves the
+  schedule from it, so the rules applied here are the ones the public page
+  would have offered slots from. Absent (or nil) resolves the organiser's
+  default schedule, which is what the dashboard calendar wants.
+  """
+  @type option :: {:enforce_availability, boolean()} | {:meeting_type, map() | nil}
+
+  @spec execute(params(), [option()]) ::
+          {:ok, Tymeslot.Meetings.MeetingSchema.t()}
+          | {:error, String.t() | :time_conflict | :slot_unavailable}
+  def execute(params, opts \\ []) do
     # The organiser's details are resolved once and threaded through: validation
     # needs the organiser email to reject self-booking, and the meeting attrs
     # need all three fields. Looking them up twice would risk the check and the
     # stored `organizer_email` disagreeing.
     organizer = get_organizer_details(params.organizer_user_id)
 
-    with :ok <- validate(params, organizer) do
+    with :ok <- validate(params, organizer),
+         :ok <- check_availability(params, opts) do
       guest_emails = params[:guest_emails] || []
 
       params
@@ -90,6 +115,55 @@ defmodule Tymeslot.Bookings.CreateAdHoc do
   defp blank?(nil), do: true
   defp blank?(s) when is_binary(s), do: String.trim(s) == ""
   defp blank?(_other), do: false
+
+  defp check_availability(params, opts) do
+    if Keyword.get(opts, :enforce_availability, false) do
+      config =
+        Policy.scheduling_config(params.organizer_user_id, Keyword.get(opts, :meeting_type))
+
+      with :ok <-
+             Validation.validate_booking_time(
+               params.start_time,
+               params[:attendee_timezone] || "Etc/UTC",
+               config
+             ) do
+        check_calendar_conflicts(params, config)
+      end
+    else
+      :ok
+    end
+  end
+
+  # Read the organiser's connected calendars rather than the availability cache:
+  # a caller booking on their behalf is often doing so minutes after they
+  # accepted something else. The window is widened by a day either side so an
+  # event starting on the neighbouring UTC date, but overlapping the slot, is
+  # still seen.
+  defp check_calendar_conflicts(params, config) do
+    from_date = params.start_time |> DateTime.to_date() |> Date.add(-1)
+    to_date = params.end_time |> DateTime.to_date() |> Date.add(1)
+
+    case CalendarEvents.get_events_for_range_fresh(
+           params.organizer_user_id,
+           from_date,
+           to_date
+         ) do
+      {:ok, events} ->
+        Validation.validate_no_conflicts(params.start_time, params.end_time, events, config)
+
+      # The organiser's provider is unreachable or slow. Refusing here would make
+      # an outage look like a full diary, so the booking proceeds — the conflict
+      # check against meetings Tymeslot already knows about still runs inside the
+      # transaction below.
+      {:error, reason} ->
+        Logger.warning("Calendar availability check failed, booking anyway",
+          organizer_user_id: params.organizer_user_id,
+          error: inspect(reason)
+        )
+
+        :ok
+    end
+  end
 
   defp build_meeting_attrs(params, {org_name, org_email, org_username}) do
     uid = UUID.generate()
