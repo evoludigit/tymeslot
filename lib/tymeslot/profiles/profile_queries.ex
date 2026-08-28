@@ -49,6 +49,30 @@ defmodule Tymeslot.Profiles.ProfileQueries do
   end
 
   @doc """
+  Fetches the profile owning the given booking API token.
+  """
+  @spec get_by_booking_api_token(String.t()) :: {:ok, ProfileSchema.t()} | {:error, :not_found}
+  def get_by_booking_api_token(token) when is_binary(token) and token != "" do
+    case Repo.get_by(ProfileSchema, booking_api_token: token) do
+      nil -> {:error, :not_found}
+      profile -> {:ok, Repo.preload(profile, :user)}
+    end
+  end
+
+  def get_by_booking_api_token(_other), do: {:error, :not_found}
+
+  @doc """
+  Sets (or clears, with `nil`) the profile's booking API token.
+  """
+  @spec update_booking_api_token(ProfileSchema.t(), String.t() | nil) ::
+          {:ok, ProfileSchema.t()} | {:error, Ecto.Changeset.t()}
+  def update_booking_api_token(%ProfileSchema{} = profile, token) do
+    profile
+    |> ProfileSchema.booking_api_token_changeset(%{booking_api_token: token})
+    |> Repo.update()
+  end
+
+  @doc """
   Updates the booking page's introductory text and its on/off switch.
   """
   @spec update_booking_text(ProfileSchema.t(), map()) ::

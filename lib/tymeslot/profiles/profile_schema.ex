@@ -33,6 +33,7 @@ defmodule Tymeslot.Profiles.ProfileSchema do
           booking_greeting: String.t() | nil,
           booking_instruction: String.t() | nil,
           freebusy_token: String.t() | nil,
+          booking_api_token: String.t() | nil,
           primary_calendar_integration_id: integer() | nil,
           user: Tymeslot.Auth.UserSchema.t() | Ecto.Association.NotLoaded.t(),
           primary_calendar_integration:
@@ -63,6 +64,7 @@ defmodule Tymeslot.Profiles.ProfileSchema do
     field(:booking_greeting, :string)
     field(:booking_instruction, :string)
     field(:freebusy_token, :string)
+    field(:booking_api_token, :string)
     field(:meeting_types, {:array, :map}, virtual: true)
     belongs_to(:user, Tymeslot.Auth.UserSchema)
 
@@ -172,6 +174,17 @@ defmodule Tymeslot.Profiles.ProfileSchema do
     else
       changeset
     end
+  end
+
+  @doc """
+  Focused changeset for setting or clearing the booking API token, without
+  re-validating unrelated fields. A `nil` token closes the endpoint.
+  """
+  @spec booking_api_token_changeset(t(), map()) :: Ecto.Changeset.t()
+  def booking_api_token_changeset(profile, attrs) do
+    profile
+    |> cast(attrs, [:booking_api_token])
+    |> unique_constraint(:booking_api_token)
   end
 
   defp validate_username(changeset) do
