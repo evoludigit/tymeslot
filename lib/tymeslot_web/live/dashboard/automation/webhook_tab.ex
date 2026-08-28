@@ -9,12 +9,15 @@ defmodule TymeslotWeb.Dashboard.Automation.WebhookTab do
   use Gettext, backend: TymeslotWeb.Gettext
 
   alias TymeslotWeb.Components.Icons.IconComponents
+  alias TymeslotWeb.Dashboard.Automation.BookingApiSection
   alias TymeslotWeb.Dashboard.Automation.WebhookCard
   alias TymeslotWeb.Dashboard.Automation.WebhookDocumentation
 
   attr :webhooks, :list, required: true
   attr :time_format, :string, required: true
   attr :testing_connection, :any, required: true
+  attr :booking_api_token, :string, default: nil
+  attr :booking_api_endpoint_url, :string, required: true
   attr :myself, :any, required: true
 
   @spec webhook_tab_content(map()) :: Phoenix.LiveView.Rendered.t()
@@ -76,6 +79,12 @@ defmodule TymeslotWeb.Dashboard.Automation.WebhookTab do
     <% end %>
 
     <WebhookDocumentation.webhook_documentation />
+
+    <BookingApiSection.booking_api_section
+      token={@booking_api_token}
+      endpoint_url={@booking_api_endpoint_url}
+      myself={@myself}
+    />
     """
   end
 end
