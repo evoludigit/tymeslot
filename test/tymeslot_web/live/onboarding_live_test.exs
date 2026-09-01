@@ -99,7 +99,7 @@ defmodule TymeslotWeb.OnboardingLiveTest do
       assert profile.full_name == "Test User"
       assert profile.username == "testuser123"
       # Without connect_params, timezone falls back to business default
-      assert profile.timezone == "Europe/Tallinn"
+      assert profile.timezone == "Europe/Paris"
 
       # Scheduling defaults are preserved when not changed
       schedule = default_schedule(user)
@@ -183,7 +183,7 @@ defmodule TymeslotWeb.OnboardingLiveTest do
 
       profile = Repo.get_by!(Tymeslot.Profiles.ProfileSchema, user_id: user.id)
       assert profile.username == "oddzone2024"
-      assert profile.timezone == "Europe/Tallinn"
+      assert profile.timezone == "Europe/Paris"
     end
 
     test "onboarding with custom scheduling preference values", %{conn: conn} do
