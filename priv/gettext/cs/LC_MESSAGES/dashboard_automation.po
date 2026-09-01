@@ -678,3 +678,33 @@ msgstr "ID doručení"
 #, elixir-autogen, elixir-format
 msgid "The delivery ID is the same on every retry of one delivery and different for every other delivery. A failed or timed-out delivery can be retried, so your endpoint may receive the same event twice: record the delivery ID and ignore a request whose ID you have already processed."
 msgstr "ID doručení je stejné při každém opakování téhož doručení a liší se pro každé jiné doručení. Neúspěšné doručení nebo doručení s vypršeným časovým limitem se může opakovat, takže váš endpoint může stejnou událost obdržet dvakrát: ukládejte si ID doručení a ignorujte požadavky s ID, které jste již zpracovali."
+
+#: lib/tymeslot_web/live/dashboard/automation/booking_api_section.ex
+#, elixir-autogen, elixir-format
+msgid "Booking API"
+msgstr "API pro rezervace"
+
+#: lib/tymeslot_web/live/dashboard/automation/booking_api_section.ex
+#, elixir-autogen, elixir-format
+msgid "Disable booking API"
+msgstr "Vypnout API pro rezervace"
+
+#: lib/tymeslot_web/live/dashboard/automation/booking_api_section.ex
+#, elixir-autogen, elixir-format
+msgid "Enable booking API"
+msgstr "Zapnout API pro rezervace"
+
+#: lib/tymeslot_web/live/dashboard/automation/booking_api_section.ex
+#, elixir-autogen, elixir-format
+msgid "Let another system create bookings for you — a CRM booking a slot you agreed on a call, for instance. Your attendee is invited as usual, with their own cancel and reschedule links."
+msgstr "Nechte jiný systém vytvářet rezervace za vás — například CRM, které zarezervuje termín dohodnutý po telefonu. Váš účastník obdrží pozvánku jako obvykle, s vlastními odkazy pro zrušení a přeložení."
+
+#: lib/tymeslot_web/live/dashboard/automation/booking_api_section.ex
+#, elixir-autogen, elixir-format
+msgid "Regenerate token"
+msgstr "Vygenerovat token znovu"
+
+#: lib/tymeslot_web/live/dashboard/automation/booking_api_section.ex
+#, elixir-autogen, elixir-format
+msgid "Send this token as an Authorization: Bearer header. Treat it like a password — anyone holding it can put meetings in your diary."
+msgstr "Tento token posílejte v hlavičce Authorization: Bearer. Zacházejte s ním jako s heslem — kdokoli jej má, může vám zapisovat schůzky do kalendáře."

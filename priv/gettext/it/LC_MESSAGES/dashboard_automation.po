@@ -677,3 +677,33 @@ msgstr "ID di consegna"
 #, elixir-autogen, elixir-format
 msgid "The delivery ID is the same on every retry of one delivery and different for every other delivery. A failed or timed-out delivery can be retried, so your endpoint may receive the same event twice: record the delivery ID and ignore a request whose ID you have already processed."
 msgstr "L'ID di consegna è lo stesso a ogni nuovo tentativo della stessa consegna e diverso per ogni altra consegna. Una consegna non riuscita o scaduta può essere ritentata, quindi il tuo endpoint potrebbe ricevere lo stesso evento due volte: registra l'ID di consegna e ignora le richieste il cui ID hai già elaborato."
+
+#: lib/tymeslot_web/live/dashboard/automation/booking_api_section.ex
+#, elixir-autogen, elixir-format
+msgid "Booking API"
+msgstr "API di prenotazione"
+
+#: lib/tymeslot_web/live/dashboard/automation/booking_api_section.ex
+#, elixir-autogen, elixir-format
+msgid "Disable booking API"
+msgstr "Disattiva l'API di prenotazione"
+
+#: lib/tymeslot_web/live/dashboard/automation/booking_api_section.ex
+#, elixir-autogen, elixir-format
+msgid "Enable booking API"
+msgstr "Attiva l'API di prenotazione"
+
+#: lib/tymeslot_web/live/dashboard/automation/booking_api_section.ex
+#, elixir-autogen, elixir-format
+msgid "Let another system create bookings for you — a CRM booking a slot you agreed on a call, for instance. Your attendee is invited as usual, with their own cancel and reschedule links."
+msgstr "Lascia che un altro sistema crei prenotazioni per te — per esempio un CRM che prenota un orario concordato durante una telefonata. Il tuo invitato riceve l'invito come sempre, con i propri link per annullare e riprogrammare."
+
+#: lib/tymeslot_web/live/dashboard/automation/booking_api_section.ex
+#, elixir-autogen, elixir-format
+msgid "Regenerate token"
+msgstr "Rigenera il token"
+
+#: lib/tymeslot_web/live/dashboard/automation/booking_api_section.ex
+#, elixir-autogen, elixir-format
+msgid "Send this token as an Authorization: Bearer header. Treat it like a password — anyone holding it can put meetings in your diary."
+msgstr "Invia questo token in un header Authorization: Bearer. Trattalo come una password: chiunque lo possieda può inserire appuntamenti nella tua agenda."
