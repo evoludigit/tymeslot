@@ -22,8 +22,9 @@ defmodule TymeslotWeb.Dashboard.CalendarGrid.SeatLockedEventsTest do
 
   # The seeded event starts at 10:00 UTC and the drop asks for 14:00 in the
   # organiser's timezone; both are rendered in that timezone, so the minute
-  # offsets below are what the block carries before and after a move.
-  @original_start_minutes 780
+  # offsets below are what the block carries before and after a move. The
+  # original one depends on that timezone's offset today, so it is derived
+  # rather than written down: a literal holds for one timezone in one season.
   @moved_start_minutes 840
 
   @locked_message "This is a group booking. Move it, cancel it or change who attends from the meeting instead."
@@ -39,6 +40,17 @@ defmodule TymeslotWeb.Dashboard.CalendarGrid.SeatLockedEventsTest do
 
   setup %{user: user} do
     {:ok, integration: insert(:calendar_integration, user: user, is_active: true)}
+  end
+
+  # Where the seeded 10:00 UTC event falls, in minutes from midnight, in the
+  # organiser's timezone (the profile factory's default) on today's date.
+  defp original_start_minutes do
+    local =
+      Date.utc_today()
+      |> DateTime.new!(~T[10:00:00], "Etc/UTC")
+      |> DateTime.shift_zone!(Tymeslot.Profiles.get_default_timezone())
+
+    local.hour * 60 + local.minute
   end
 
   # A meeting plus the provider event Tymeslot wrote for it, linked by uid.
@@ -124,7 +136,7 @@ defmodule TymeslotWeb.Dashboard.CalendarGrid.SeatLockedEventsTest do
       |> render_hook("event_dropped", drop_params(ctx.event))
 
       assert render(lv) =~ html_escape(@locked_message)
-      assert event_block(lv, ctx.event.id) =~ ~s(data-start-minutes="#{@original_start_minutes}")
+      assert event_block(lv, ctx.event.id) =~ ~s(data-start-minutes="#{original_start_minutes()}")
       assert_untouched(ctx, jobs)
     end
 
@@ -159,7 +171,7 @@ defmodule TymeslotWeb.Dashboard.CalendarGrid.SeatLockedEventsTest do
       })
 
       assert render(lv) =~ html_escape(@locked_message)
-      assert event_block(lv, ctx.event.id) =~ ~s(data-start-minutes="#{@original_start_minutes}")
+      assert event_block(lv, ctx.event.id) =~ ~s(data-start-minutes="#{original_start_minutes()}")
       assert_untouched(ctx, jobs)
     end
 
