@@ -690,7 +690,33 @@ msgstr "Smazat integraci Telegram"
 msgid "Delete webhook"
 msgstr "Smazat webhook"
 
+#: lib/tymeslot_web/live/dashboard/automation/booking_api_section.ex
 #: lib/tymeslot_web/live/dashboard/automation/regenerate_token_modal.ex
 #, elixir-autogen, elixir-format
 msgid "Regenerate token"
 msgstr "Vygenerovat token znovu"
+
+#: lib/tymeslot_web/live/dashboard/automation/booking_api_section.ex
+#, elixir-autogen, elixir-format
+msgid "Booking API"
+msgstr "API pro rezervace"
+
+#: lib/tymeslot_web/live/dashboard/automation/booking_api_section.ex
+#, elixir-autogen, elixir-format
+msgid "Disable booking API"
+msgstr "Vypnout API pro rezervace"
+
+#: lib/tymeslot_web/live/dashboard/automation/booking_api_section.ex
+#, elixir-autogen, elixir-format
+msgid "Enable booking API"
+msgstr "Zapnout API pro rezervace"
+
+#: lib/tymeslot_web/live/dashboard/automation/booking_api_section.ex
+#, elixir-autogen, elixir-format
+msgid "Let another system create bookings for you — a CRM booking a slot you agreed on a call, for instance. Your attendee is invited as usual, with their own cancel and reschedule links."
+msgstr "Nechte jiný systém vytvářet rezervace za vás — například CRM, které zarezervuje termín dohodnutý po telefonu. Váš účastník obdrží pozvánku jako obvykle, s vlastními odkazy pro zrušení a přeložení."
+
+#: lib/tymeslot_web/live/dashboard/automation/booking_api_section.ex
+#, elixir-autogen, elixir-format
+msgid "Send this token as an Authorization: Bearer header. Treat it like a password — anyone holding it can put meetings in your diary."
+msgstr "Tento token posílejte v hlavičce Authorization: Bearer. Zacházejte s ním jako s heslem — kdokoli jej má, může vám zapisovat schůzky do kalendáře."
