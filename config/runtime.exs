@@ -821,3 +821,37 @@ docs_article_base_url = System.get_env("DOCS_ARTICLE_BASE_URL")
 if docs_article_base_url && String.trim(docs_article_base_url) != "" do
   config :tymeslot, :docs_article_base_url, String.trim(docs_article_base_url)
 end
+
+# Langue de repli de l'instance, fixee au deploiement plutot que par visiteur.
+#
+# 1.14 ajoute deux reglages d'administration (tableau de bord et pages
+# publiques) pour la meme chose. Ce ne sont que des *surcharges* :
+# `Tymeslot.Locales.surface_default/1` retombe sur `default_locale/0`, donc sur
+# `:locales`'s `:default`, quand elles ne sont pas renseignees. Regler ce
+# `:default` reste donc la voie sans interface, et l'interface garde le dernier
+# mot si elle est un jour utilisee.
+#
+# Les listes a cles sont fusionnees en profondeur : `:supported` reste celui de
+# config/config.exs, seul `:default` est remplace.
+default_locale = System.get_env("DEFAULT_LOCALE")
+
+if default_locale && String.trim(default_locale) != "" do
+  code = String.trim(default_locale)
+  # Valider si l'on peut : `:supported` vient de la configuration compilee et
+  # est deja charge ici. Si on ne le voit pas, on fait confiance plutot que de
+  # faire echouer le demarrage sur une verification qu'on ne sait pas mener.
+  codes =
+    :tymeslot
+    |> Application.get_env(:locales, [])
+    |> Keyword.get(:supported, [])
+    |> Enum.map(& &1.code)
+
+  if codes != [] and code not in codes do
+    raise """
+    DEFAULT_LOCALE=#{code} n'est pas une langue de ce build.
+    Langues disponibles : #{Enum.join(codes, ", ")}
+    """
+  end
+
+  config :tymeslot, :locales, default: code
+end
