@@ -36,6 +36,7 @@ defmodule Tymeslot.Bookings.CreateAdHoc do
           required(:attendee_email) => String.t(),
           required(:organizer_user_id) => pos_integer(),
           optional(:attendee_timezone) => String.t(),
+          optional(:attendee_locale) => String.t(),
           optional(:calendar_integration_id) => pos_integer() | nil,
           optional(:calendar_path) => String.t() | nil,
           optional(:video_integration_id) => pos_integer() | nil,
