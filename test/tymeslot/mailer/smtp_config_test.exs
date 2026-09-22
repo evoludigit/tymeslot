@@ -150,6 +150,37 @@ defmodule Tymeslot.Mailer.SMTPConfigTest do
       refute :tlsv1 in versions
     end
 
+    test "TLS 1.3 middlebox compatibility mode is left at OTP's default" do
+      # Kept on: it is what relays behind a middlebox need. The relays that
+      # cannot answer it are handled by the adapter's retry, not by giving the
+      # mode up for everyone.
+      config =
+        SMTPConfig.build(
+          host: "smtp.example.com",
+          username: "user",
+          password: "pass"
+        )
+
+      refute Keyword.has_key?(config[:tls_options], :middlebox_comp_mode)
+      assert SMTPConfig.middlebox_comp_mode?(config[:tls_options])
+    end
+
+    test "middlebox compatibility mode can be turned off for a retry" do
+      config =
+        SMTPConfig.build(
+          host: "smtp.example.com",
+          username: "user",
+          password: "pass"
+        )
+
+      retry_options = SMTPConfig.disable_middlebox_comp_mode(config[:tls_options])
+
+      assert retry_options[:middlebox_comp_mode] == false
+      refute SMTPConfig.middlebox_comp_mode?(retry_options)
+      assert retry_options[:versions] == config[:tls_options][:versions]
+      assert retry_options[:verify] == config[:tls_options][:verify]
+    end
+
     test "TLS options use verify_peer for security" do
       config =
         SMTPConfig.build(

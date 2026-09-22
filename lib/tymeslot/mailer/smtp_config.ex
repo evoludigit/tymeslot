@@ -148,6 +148,34 @@ defmodule Tymeslot.Mailer.SMTPConfig do
     config
   end
 
+  @doc """
+  Whether `tls_options` still leave TLS 1.3 middlebox compatibility mode on.
+
+  OTP's client defaults it to `true`, so options that say nothing have it on.
+  """
+  @spec middlebox_comp_mode?(keyword() | nil) :: boolean()
+  def middlebox_comp_mode?(nil), do: false
+  def middlebox_comp_mode?(tls_options), do: Keyword.get(tls_options, :middlebox_comp_mode, true)
+
+  @doc """
+  Turns TLS 1.3 middlebox compatibility mode off in `tls_options`.
+
+  In that mode OTP's client dresses the handshake up as TLS 1.2 for middleboxes
+  that would otherwise drop it — and then *requires* the server to answer with
+  a dummy ChangeCipherSpec record. RFC 8446 appendix D.4 makes that record
+  optional, so a server that omits it fails the handshake with
+  `Failed to assert middlebox server message` and a fatal Unexpected Message
+  alert, which gen_smtp reports as the opaque `:tls_failed`. OTP considers
+  asserting the record correct (erlang/otp#8470) and points at this option.
+
+  Both populations exist, so neither setting works everywhere: callers keep the
+  default and use this to retry once when a handshake fails, rather than
+  giving up middlebox compatibility for every relay.
+  """
+  @spec disable_middlebox_comp_mode(keyword()) :: keyword()
+  def disable_middlebox_comp_mode(tls_options),
+    do: Keyword.put(tls_options, :middlebox_comp_mode, false)
+
   # Validates SMTP host is present and non-empty
   defp validate_host!(nil) do
     raise ArgumentError, "SMTP host is required (set SMTP_HOST environment variable)"
