@@ -105,6 +105,47 @@ defmodule Tymeslot.Mailer.SMTPConfigTest do
       assert is_function(match_fun, 2)
     end
 
+    test "TLS 1.3 middlebox compatibility mode is off by default" do
+      # The relays we have met omit the dummy ChangeCipherSpec the mode then
+      # demands, and OTP aborts the handshake without it.
+      config =
+        SMTPConfig.build(
+          host: "smtp.example.com",
+          username: "user",
+          password: "pass"
+        )
+
+      assert config[:tls_options][:middlebox_comp_mode] == false
+    end
+
+    test "middlebox_compat: true restores the mode on both TLS paths" do
+      # Port 465 so that `:sockopts` is built too: gen_smtp reads the
+      # implicit-TLS options from there and ignores `:tls_options` entirely, so
+      # a flag that reached only one of them would be inert on half the relays.
+      config =
+        SMTPConfig.build(
+          host: "smtp.example.com",
+          port: 465,
+          username: "user",
+          password: "pass",
+          middlebox_compat: true
+        )
+
+      assert config[:tls_options][:middlebox_comp_mode] == true
+      assert config[:sockopts][:middlebox_comp_mode] == true
+    end
+
+    test "rejects a middlebox_compat that is not a boolean" do
+      assert_raise ArgumentError, ~r/middlebox_compat must be true, false or nil/, fn ->
+        SMTPConfig.build(
+          host: "smtp.example.com",
+          username: "user",
+          password: "pass",
+          middlebox_compat: "yes"
+        )
+      end
+    end
+
     test "TLS versions include only modern protocols" do
       config =
         SMTPConfig.build(

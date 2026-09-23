@@ -9,7 +9,7 @@ defmodule Tymeslot.Mailer.Providers do
 
       | `EMAIL_ADAPTER` | Adapter                    | Kind    | Credentials |
       |-----------------|----------------------------|---------|-------------|
-      | `smtp`          | `Swoosh.Adapters.SMTP`     | `:smtp` | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_TLS_VERIFY`, `SMTP_CACERTFILE` |
+      | `smtp`          | `Swoosh.Adapters.SMTP`     | `:smtp` | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_TLS_VERIFY`, `SMTP_CACERTFILE`, `SMTP_TLS_MIDDLEBOX_COMPAT` |
       | `postmark`      | `Swoosh.Adapters.Postmark` | `:api`  | `POSTMARK_API_KEY` |
       | `sendgrid`      | `Swoosh.Adapters.Sendgrid` | `:api`  | `SENDGRID_API_KEY` |
       | `mailgun`       | `Swoosh.Adapters.Mailgun`  | `:api`  | `MAILGUN_API_KEY`, `MAILGUN_DOMAIN`, optional `MAILGUN_BASE_URL` |
@@ -90,7 +90,12 @@ defmodule Tymeslot.Mailer.Providers do
         username: "SMTP_USERNAME",
         password: "SMTP_PASSWORD"
       },
-      optional_env_vars: ["SMTP_PORT", "SMTP_TLS_VERIFY", "SMTP_CACERTFILE"],
+      optional_env_vars: [
+        "SMTP_PORT",
+        "SMTP_TLS_VERIFY",
+        "SMTP_CACERTFILE",
+        "SMTP_TLS_MIDDLEBOX_COMPAT"
+      ],
       kind: :smtp,
       probe: :smtp,
       dev_only: false
@@ -162,6 +167,9 @@ defmodule Tymeslot.Mailer.Providers do
   # Accepted `SMTP_TLS_VERIFY` values. `none` accepts any certificate the relay
   # presents; see `Tymeslot.Mailer.SMTPConfig` for why that is a last resort.
   @tls_verify_modes %{"peer" => :peer, "none" => :none}
+
+  # Accepted values for boolean SMTP variables.
+  @boolean_values %{"true" => true, "false" => false}
   @tls_verify_mode_names @tls_verify_modes |> Map.keys() |> Enum.sort()
 
   @doc "Every accepted `EMAIL_ADAPTER` value, sorted."
@@ -346,7 +354,8 @@ defmodule Tymeslot.Mailer.Providers do
          username: username,
          password: password,
          tls_verify: env_tls_verify!("SMTP_TLS_VERIFY"),
-         cacertfile: env_optional("SMTP_CACERTFILE")
+         cacertfile: env_optional("SMTP_CACERTFILE"),
+         middlebox_compat: env_middlebox_compat!("SMTP_TLS_MIDDLEBOX_COMPAT")
        )}
     end
   end
@@ -422,6 +431,26 @@ defmodule Tymeslot.Mailer.Providers do
             raise ArgumentError,
                   "Invalid #{var}: #{inspect(value)} " <>
                     "(expected one of: #{Enum.join(@tls_verify_mode_names, ", ")})"
+        end
+    end
+  end
+
+  # `true` restores OTP's TLS 1.3 middlebox compatibility mode for a relay
+  # whose path needs the handshake shaped like TLS 1.2. Off by default: the
+  # relays we have met omit the dummy ChangeCipherSpec the mode then demands.
+  defp env_middlebox_compat!(var) do
+    case env_optional(var) do
+      nil ->
+        false
+
+      value ->
+        case Map.fetch(@boolean_values, String.downcase(value)) do
+          {:ok, bool} ->
+            bool
+
+          :error ->
+            raise ArgumentError,
+                  "Invalid #{var}: #{inspect(value)} (expected one of: false, true)"
         end
     end
   end

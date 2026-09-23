@@ -280,11 +280,32 @@ defmodule Tymeslot.Mailer.SMTPConfig do
     end
   end
 
+  defp validate_middlebox_compat!(nil), do: false
+  defp validate_middlebox_compat!(compat) when is_boolean(compat), do: compat
+
+  defp validate_middlebox_compat!(compat) do
+    raise ArgumentError,
+          "SMTP middlebox_compat must be true, false or nil, got: #{inspect(compat)}"
+  end
+
   # Builds TLS options for OTP 26+ certificate verification
   defp build_tls_options(smtp_host, opts) do
     base = [
       # Modern TLS versions only (TLS 1.2 and 1.3)
       versions: [:"tlsv1.2", :"tlsv1.3"],
+      # Two populations of relay disagree about the TLS 1.3 middlebox
+      # compatibility mode, and nothing on the wire says which one is in front
+      # of us. OTP's client defaults the mode on: it dresses the handshake up
+      # as TLS 1.2 so a middlebox on the path does not drop it, and then
+      # *demands* the relay answer with a dummy ChangeCipherSpec record. RFC
+      # 8446 appendix D.4 leaves that record optional and other TLS clients
+      # tolerate its absence, so a relay that omits it works everywhere except
+      # against OTP, where the handshake aborts with `Failed to assert
+      # middlebox server message` and every email fails with `:tls_failed`.
+      # That population is the one we have met, so the mode is off by default
+      # and `SMTP_TLS_MIDDLEBOX_COMPAT` turns it back on for the rarer path
+      # that needs the TLS 1.2 shape to get through.
+      middlebox_comp_mode: validate_middlebox_compat!(opts[:middlebox_compat]),
       # Server Name Indication for hostname verification (prevents MITM)
       server_name_indication: String.to_charlist(smtp_host),
       # Maximum certificate chain depth: root CA + up to 3 intermediates + server cert
