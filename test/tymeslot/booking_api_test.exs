@@ -265,6 +265,28 @@ defmodule Tymeslot.BookingApiTest do
       assert meeting.duration == 45
     end
 
+    test "renders the title in the organiser's language", %{user: user, profile: profile} do
+      user |> Ecto.Changeset.change(locale: "fr") |> Repo.update!()
+
+      assert {:ok, :created, meeting} =
+               BookingApi.create_booking(
+                 profile,
+                 body(%{"title" => nil, "meeting_type" => "product-demo"})
+               )
+
+      assert meeting.title == "Product demo avec Robin Vale"
+    end
+
+    test "is reminded like a booking made on the booking page", %{profile: profile} do
+      assert {:ok, :created, meeting} =
+               BookingApi.create_booking(
+                 profile,
+                 body(%{"title" => nil, "meeting_type" => "product-demo"})
+               )
+
+      assert Enum.map(meeting.reminders, &(&1[:value] || &1["value"])) == [30]
+    end
+
     test "an explicit title wins over the meeting type's name", %{profile: profile} do
       assert {:ok, :created, meeting} =
                BookingApi.create_booking(
@@ -274,6 +296,12 @@ defmodule Tymeslot.BookingApiTest do
 
       assert meeting.title == "Discovery call"
       assert meeting.duration == 45
+    end
+
+    test "a booking without a meeting type schedules no reminder", %{profile: profile} do
+      assert {:ok, :created, meeting} = BookingApi.create_booking(profile, body())
+
+      assert meeting.reminders == []
     end
 
     test "refuses an unknown slug", %{profile: profile} do

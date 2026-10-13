@@ -204,12 +204,14 @@ defmodule Tymeslot.Bookings.CreateAdHoc do
       # is theirs; `attendee_message` stays for words the attendee wrote.
       attendee_message: nil,
       organizer_note: blank_to_nil(params[:organizer_note]),
-      # Explicitly none, not "unset". A nil here is read by
-      # `Notifications.Orchestrator` as a meeting from before the reminders
-      # column existed, and answered with the legacy default of 30 minutes —
-      # so a booking whose own confirmation says no reminders are scheduled
-      # sends one anyway. An empty list is honoured as the answer it is.
-      reminders: [],
+      # Explicitly none unless the caller says otherwise, not "unset". A nil
+      # here is read by `Notifications.Orchestrator` as a meeting from before
+      # the reminders column existed, and answered with the legacy default of
+      # 30 minutes — so a booking whose own confirmation says no reminders are
+      # scheduled sends one anyway. An empty list is honoured as the answer it
+      # is. The booking API passes its meeting type's reminders, so a booking
+      # made there is reminded like one made on the booking page.
+      reminders: params[:reminders] || [],
       attendee_timezone: params[:attendee_timezone] || "Etc/UTC",
       # The organiser chooses which language the guests are written to; a
       # missing or unsupported choice falls back to the booking default.

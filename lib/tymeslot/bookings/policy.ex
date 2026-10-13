@@ -171,7 +171,7 @@ defmodule Tymeslot.Bookings.Policy do
       resolve_meeting_type_details(meeting_type_record, params, organizer_user_id)
 
     # Get reminder configuration
-    reminders = get_meeting_reminders(meeting_type_record)
+    reminders = meeting_reminders(meeting_type_record)
 
     # A meeting type requiring manual approval holds its bookings instead of
     # confirming them. The deadline is stamped here, at request time, rather
@@ -354,8 +354,12 @@ defmodule Tymeslot.Bookings.Policy do
     end
   end
 
-  # Gets reminder configuration from meeting type or returns defaults
-  defp get_meeting_reminders(meeting_type_record) do
+  @doc """
+  The reminders a booking of `meeting_type_record` is sent: the meeting type's
+  own configuration, or the default 30 minutes before when it has none.
+  """
+  @spec meeting_reminders(map() | nil) :: [reminder()]
+  def meeting_reminders(meeting_type_record) do
     case meeting_type_record do
       %{reminder_config: reminder_config} when is_list(reminder_config) ->
         ReminderUtils.normalize_reminders(reminder_config)

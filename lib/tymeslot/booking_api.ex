@@ -28,8 +28,11 @@ defmodule Tymeslot.BookingApi do
 
   alias Tymeslot.BookingApi.Params
   alias Tymeslot.BookingApi.RequestQueries
+  alias Tymeslot.Bookings.BookingTitle
   alias Tymeslot.Bookings.CreateAdHoc
+  alias Tymeslot.Bookings.Policy
   alias Tymeslot.Features
+  alias Tymeslot.Emails.RecipientLocale
   alias Tymeslot.Integrations.Calendar.Events, as: CalendarEvents
   alias Tymeslot.Meetings.MeetingSchema
   alias Tymeslot.MeetingTypes.MeetingTypeQueries
@@ -221,7 +224,7 @@ defmodule Tymeslot.BookingApi do
     {calendar_integration_id, calendar_path} = calendar_target(meeting_type || user_id)
 
     %{
-      title: title(params, meeting_type),
+      title: title(params, meeting_type, user_id),
       start_time: params.start_time,
       end_time: end_time(params, meeting_type),
       attendee_name: params.attendee_name,
@@ -232,17 +235,22 @@ defmodule Tymeslot.BookingApi do
       calendar_integration_id: calendar_integration_id,
       calendar_path: calendar_path,
       video_integration_id: meeting_type && meeting_type.video_integration_id,
+      reminders: meeting_type && Policy.meeting_reminders(meeting_type),
       guest_emails: params.guest_emails
     }
   end
 
   # Mirrors the title the public booking page composes for the same meeting
-  # type, so a booking made through the API is indistinguishable from one the
-  # attendee made themselves in the organiser's calendar and inbox.
-  defp title(%{title: title}, _meeting_type) when is_binary(title), do: title
+  # type, in the organiser's language as `Policy` renders it, so a booking made
+  # through the API is indistinguishable from one the attendee made themselves
+  # in the organiser's calendar and inbox.
+  defp title(%{title: title}, _meeting_type, _user_id) when is_binary(title), do: title
 
-  defp title(%{attendee_name: attendee_name}, %MeetingTypeSchema{name: name}),
-    do: "#{name} with #{attendee_name}"
+  defp title(%{attendee_name: attendee_name}, %MeetingTypeSchema{name: name}, user_id) do
+    RecipientLocale.with_user_id_locale(user_id, fn ->
+      BookingTitle.render(name, attendee_name)
+    end)
+  end
 
   defp end_time(%{end_time: %DateTime{} = end_time}, _meeting_type), do: end_time
 
