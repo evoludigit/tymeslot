@@ -1,10 +1,10 @@
 defmodule Tymeslot.Integrations.Calendar.IcsGeneratorItipTest do
   # Mutates the :email application env, so it cannot run alongside the other
   # ICS tests.
-  use ExUnit.Case, async: false
+  use Tymeslot.DataCase, async: false
   @moduletag :integrations
 
-  import Swoosh.Email
+  import Swoosh.Email, except: [from: 2]
 
   alias Tymeslot.Integrations.Calendar.IcsGenerator
 
@@ -48,7 +48,7 @@ defmodule Tymeslot.Integrations.Calendar.IcsGeneratorItipTest do
       refute attachment.data =~ ~r/[^\r]\n/
 
       assert unfold(attachment.data) =~
-               ~s(ATTENDEE;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=FALSE;CN="Jane Doe":)
+               ~s(ATTENDEE;ROLE=REQ-PARTICIPANT;PARTSTAT=ACCEPTED;RSVP=FALSE;CN="Jane Doe":)
 
       assert attachment.data =~ ~s(ORGANIZER;CN="Olga Organiser":mailto:organizer@example.com)
 
@@ -81,6 +81,66 @@ defmodule Tymeslot.Integrations.Calendar.IcsGeneratorItipTest do
       assert attachment.data =~ "\r\nORGANIZER:mailto:organizer@example.com"
     end
 
+    test "a guest's copy names the guest as a second attendee" do
+      attachment =
+        @details
+        |> Map.put(:ics_guest, %{email: "greg@example.com", name: "Greg Guest"})
+        |> IcsGenerator.generate_ics_attachment()
+
+      ics = unfold(attachment.data)
+
+      assert ics =~ ~s(CN="Jane Doe":mailto:jane@example.com)
+
+      assert ics =~
+               ~s(ATTENDEE;ROLE=REQ-PARTICIPANT;PARTSTAT=ACCEPTED;RSVP=FALSE;CN="Greg Guest":mailto:greg@example.com)
+
+      assert length(Regex.scan(~r/^ATTENDEE/m, ics)) == 2
+    end
+
+    test "a guest who is the booker is not listed twice" do
+      attachment =
+        @details
+        |> Map.put(:ics_guest, %{email: "JANE@example.com", name: "Jane"})
+        |> IcsGenerator.generate_ics_attachment()
+
+      assert length(Regex.scan(~r/^ATTENDEE/m, unfold(attachment.data))) == 1
+    end
+
+    test "guest emails carry the guest in their calendar attachment" do
+      details =
+        Tymeslot.EmailTestHelpers.build_appointment_details(%{
+          guest_name: "Greg Guest",
+          guest_accept_url: "https://tymeslot.example.com/guest/tok/accept",
+          guest_decline_url: "https://tymeslot.example.com/guest/tok/decline",
+          original_start_time: ~U[2026-01-14 09:00:00Z],
+          original_start_time_attendee_tz: ~U[2026-01-14 09:00:00Z],
+          ical_sequence: 2
+        })
+
+      for {template, method} <- [
+            {Tymeslot.Emails.Templates.AppointmentConfirmation, "REQUEST"},
+            {Tymeslot.Emails.Templates.AppointmentRescheduled, "REQUEST"},
+            {Tymeslot.Emails.Templates.AppointmentCancellation, "CANCEL"}
+          ] do
+        email = template.render(:guest, "greg@example.com", details)
+        ics = Enum.find(email.attachments, &(&1.content_type == "text/calendar"))
+
+        assert ics.data =~ "METHOD:#{method}", inspect(template)
+        assert unfold(ics.data) =~ ~s(CN="Greg Guest":mailto:greg@example.com), inspect(template)
+      end
+    end
+
+    test "the publish default never lists the guest" do
+      set_ics_method(:publish)
+
+      attachment =
+        @details
+        |> Map.put(:ics_guest, %{email: "greg@example.com", name: "Greg Guest"})
+        |> IcsGenerator.generate_ics_attachment()
+
+      refute attachment.data =~ "greg@example.com"
+    end
+
     test "a payload without an attendee falls back to PUBLISH" do
       attachment =
         @details |> Map.delete(:attendee_email) |> IcsGenerator.generate_ics_attachment()
@@ -94,7 +154,7 @@ defmodule Tymeslot.Integrations.Calendar.IcsGeneratorItipTest do
 
       raw =
         new()
-        |> from({"Tymeslot", "rdv@example.com"})
+        |> Swoosh.Email.from({"Tymeslot", "rdv@example.com"})
         |> to("jane@example.com")
         |> subject("Booked")
         |> text_body("text")

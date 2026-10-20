@@ -130,7 +130,10 @@ defmodule Tymeslot.Emails.Templates.AppointmentConfirmation do
   end
 
   def render(:guest, guest_email, appointment_details) do
-    appointment_details = TemplateHelper.as_guest_view(appointment_details)
+    appointment_details =
+      appointment_details
+      |> TemplateHelper.as_guest_view()
+      |> TemplateHelper.with_ics_guest(guest_email)
 
     # Guests have no per-guest locale field; they intentionally inherit the
     # booker's locale (`:attendee_locale`) set when the booking was created.

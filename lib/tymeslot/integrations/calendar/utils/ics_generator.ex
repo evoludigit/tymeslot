@@ -154,7 +154,7 @@ defmodule Tymeslot.Integrations.Calendar.IcsGenerator do
       uid:
         "#{Map.get(meeting_details, :uid, UUID.uuid4())}@#{Application.get_env(:tymeslot, :email)[:domain]}",
       organizer: format_organizer(meeting_details, itip),
-      attendee: format_attendees(meeting_details, itip),
+      attendees: format_attendees(meeting_details, itip),
       conference: conference_uri(meeting_details),
       status: Map.get(meeting_details, :status, "CONFIRMED")
     }
@@ -188,10 +188,10 @@ defmodule Tymeslot.Integrations.Calendar.IcsGenerator do
   # `EMAIL_ICS_METHOD=request` is the opt-out from all of the above, for a
   # deployment whose invitees are on Outlook / Microsoft 365: they then get
   # `METHOD:REQUEST` / `METHOD:CANCEL` (see `itip?/1`), with no
-  # SCHEDULE-AGENT and `RSVP=FALSE`, so the meeting lands in their calendar
-  # without asking for a reply nobody reads.
+  # SCHEDULE-AGENT, `PARTSTAT=ACCEPTED` and `RSVP=FALSE`, so the meeting lands
+  # in their calendar without asking for a reply nobody reads.
   defp render_vcalendar(event, method, sequence) do
-    attendee_line = if event.attendee, do: "ATTENDEE#{event.attendee}\n", else: ""
+    attendee_lines = Enum.map_join(event.attendees, &"ATTENDEE#{&1}\n")
     sequence_line = if is_integer(sequence), do: "SEQUENCE:#{sequence}\n", else: ""
     method_line = method_line(method)
     status = status_for(method, event.status)
@@ -216,7 +216,7 @@ defmodule Tymeslot.Integrations.Calendar.IcsGenerator do
     DESCRIPTION#{tag_language(description_text, lang)}:#{description_text}
     LOCATION#{tag_language(location_text, lang)}:#{location_text}
     #{conference_line}ORGANIZER#{event.organizer}
-    #{attendee_line}STATUS:#{status}
+    #{attendee_lines}STATUS:#{status}
     END:VEVENT
     END:VCALENDAR
     """)
@@ -351,18 +351,40 @@ defmodule Tymeslot.Integrations.Calendar.IcsGenerator do
 
     case attendee_email do
       email when is_binary(email) and email != "" ->
-        attendee_name = Map.get(meeting_details, :attendee_name)
-        "#{attendee_params(itip)}#{cn_param(attendee_name)}:mailto:#{email}"
+        attendee = format_attendee(email, Map.get(meeting_details, :attendee_name), itip)
+        [attendee | itip_guest(meeting_details, email, itip)]
 
       _other ->
-        nil
+        []
     end
   end
+
+  # A guest's copy of an iTIP message names that guest too, so Outlook files
+  # it as an invitation addressed to them. Only the recipient is added: the
+  # other guests' addresses are not theirs to see.
+  defp itip_guest(meeting_details, attendee_email, true) do
+    case Map.get(meeting_details, :ics_guest) do
+      %{email: email} = guest when is_binary(email) and email != "" ->
+        if String.downcase(email) == String.downcase(attendee_email),
+          do: [],
+          else: [format_attendee(email, Map.get(guest, :name), true)]
+
+      _other ->
+        []
+    end
+  end
+
+  defp itip_guest(_meeting_details, _attendee_email, false), do: []
+
+  defp format_attendee(email, name, itip),
+    do: "#{attendee_params(itip)}#{cn_param(name)}:mailto:#{email}"
 
   defp schedule_agent_param(true), do: ""
   defp schedule_agent_param(false), do: ";SCHEDULE-AGENT=CLIENT"
 
-  defp attendee_params(true), do: ";ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=FALSE"
+  # ACCEPTED: the attendee chose the slot themselves, and a guest was invited
+  # to a meeting the booker already accepted.
+  defp attendee_params(true), do: ";ROLE=REQ-PARTICIPANT;PARTSTAT=ACCEPTED;RSVP=FALSE"
   defp attendee_params(false), do: ";SCHEDULE-AGENT=CLIENT"
 
   defp cn_param(name) when is_binary(name) and name != "" do

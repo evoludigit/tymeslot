@@ -154,7 +154,10 @@ defmodule Tymeslot.Emails.Templates.AppointmentCancellation do
   end
 
   def render(:guest, guest_email, appointment_details) do
-    appointment_details = Formatting.without_location_note(appointment_details)
+    appointment_details =
+      appointment_details
+      |> Formatting.without_location_note()
+      |> TemplateHelper.with_ics_guest(guest_email)
 
     # Guests inherit the booker's locale, as their invitation does.
     locale = Map.get(appointment_details, :attendee_locale, "en")

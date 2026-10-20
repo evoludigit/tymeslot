@@ -121,6 +121,19 @@ defmodule Tymeslot.Emails.Shared.TemplateHelper do
   def as_guest_view(appointment_details), do: Map.put(appointment_details, :audience, :guest)
 
   @doc """
+  Records the guest a render is addressed to, so the calendar attachment can
+  name them as an attendee when it is sent as an iTIP invitation
+  (`EMAIL_ICS_METHOD=request`).
+  """
+  @spec with_ics_guest(map(), String.t()) :: map()
+  def with_ics_guest(appointment_details, guest_email) do
+    Map.put(appointment_details, :ics_guest, %{
+      email: guest_email,
+      name: Map.get(appointment_details, :guest_name)
+    })
+  end
+
+  @doc """
   The meeting-details map for an organiser-addressed render: the meeting as the
   organiser sees it, in their own timezone and on the clock they chose.
 
