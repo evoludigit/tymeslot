@@ -413,6 +413,14 @@ config :tymeslot, :email,
   from_email: from_email,
   support_email: System.get_env("EMAIL_SUPPORT_ADDRESS") || from_email,
   contact_recipient: System.get_env("EMAIL_CONTACT_RECIPIENT") || from_email,
+  # "request" sends the .ics in attendee emails as a real iTIP invitation
+  # (METHOD:REQUEST / CANCEL), which Outlook / Microsoft 365 needs to file the
+  # meeting in the calendar on its own. Anything else keeps METHOD:PUBLISH.
+  ics_method:
+    if(String.downcase(String.trim(System.get_env("EMAIL_ICS_METHOD") || "")) == "request",
+      do: :request,
+      else: :publish
+    ),
   domain:
     System.get_env("PHX_HOST") ||
       System.get_env("CLOUDRON_APP_DOMAIN") ||

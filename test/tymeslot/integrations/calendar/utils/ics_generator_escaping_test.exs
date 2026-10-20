@@ -76,7 +76,7 @@ defmodule Tymeslot.Integrations.Calendar.IcsGeneratorEscapingTest do
       description_value =
         ics_content
         |> String.replace("\r\n ", "")
-        |> String.split("\n")
+        |> String.split("\r\n")
         |> Enum.find_value(fn line ->
           case String.split(line, ":", parts: 2) do
             ["DESCRIPTION" <> _params, value] -> value

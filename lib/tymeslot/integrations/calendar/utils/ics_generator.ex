@@ -56,8 +56,9 @@ defmodule Tymeslot.Integrations.Calendar.IcsGenerator do
 
   @doc """
   Generates an ICS attachment that cancels an existing event
-  (`METHOD:PUBLISH` + `STATUS:CANCELLED`). We deliberately avoid
-  `METHOD:CANCEL` here — see the note on `render_vcalendar/3`.
+  (`METHOD:PUBLISH` + `STATUS:CANCELLED`). We avoid `METHOD:CANCEL` by
+  default — see the note on `render_vcalendar/3`; with `EMAIL_ICS_METHOD=request`
+  it is sent as a real iTIP `METHOD:CANCEL`.
 
   The `sequence` should be the next value after the last sent invitation so
   calendar clients recognise the cancellation as more recent than the event
@@ -75,8 +76,33 @@ defmodule Tymeslot.Integrations.Calendar.IcsGenerator do
   end
 
   defp build_attachment(meeting_details, method, sequence, locale, filename) do
+    method = if itip?(meeting_details), do: itip_method(method), else: method
     ics_content = generate_ics_with(meeting_details, method, sequence, locale)
 
+    build_swoosh_attachment(method, ics_content, filename)
+  end
+
+  # An iTIP message is only recognised as one (Outlook / Exchange turn it into
+  # a meeting request and put it in the calendar) when the MIME part says so:
+  # `Content-Type: text/calendar; method=REQUEST`. Swoosh would split such a
+  # `content_type` on "/" (see below), so the full header goes in the
+  # attachment's own headers, which gen_smtp's mimemail keeps as given instead
+  # of deriving one from type and subtype.
+  defp build_swoosh_attachment(method, ics_content, filename)
+       when method in [:itip_request, :itip_cancel] do
+    %Swoosh.Attachment{
+      filename: filename,
+      content_type: "text/calendar",
+      data: ics_content,
+      headers: [
+        {"Content-Type",
+         "text/calendar; charset=utf-8; method=#{itip_method_name(method)}; " <>
+           "name=\"#{escape_param_value(filename)}\""}
+      ]
+    }
+  end
+
+  defp build_swoosh_attachment(_method, ics_content, filename) do
     # Bare `text/calendar`, no inline params. Swoosh splits the attachment
     # content_type on "/", so a value like "text/calendar; method=PUBLISH"
     # lands the params inside the subtype and the MIME encoder emits an
@@ -91,15 +117,34 @@ defmodule Tymeslot.Integrations.Calendar.IcsGenerator do
     }
   end
 
+  # `EMAIL_ICS_METHOD=request` opts into real iTIP invitations for recipients
+  # whose mail system only files a meeting in the calendar on its own when it
+  # is one (Outlook / Microsoft 365). iTIP needs an ATTENDEE (RFC 5546 §3.2.2),
+  # so a payload without one keeps the PUBLISH form.
+  defp itip?(meeting_details) do
+    attendee_email = Map.get(meeting_details, :attendee_email)
+
+    Application.get_env(:tymeslot, :email, [])[:ics_method] == :request and
+      is_binary(attendee_email) and attendee_email != ""
+  end
+
+  defp itip_method(:request), do: :itip_request
+  defp itip_method(:cancel), do: :itip_cancel
+
+  defp itip_method_name(:itip_request), do: "REQUEST"
+  defp itip_method_name(:itip_cancel), do: "CANCEL"
+
   defp generate_ics_with(meeting_details, method, sequence, locale) do
     Gettext.with_locale(TymeslotWeb.Gettext, locale, fn ->
       meeting_details
-      |> build_event()
+      |> build_event(method)
       |> render_vcalendar(method, sequence)
     end)
   end
 
-  defp build_event(meeting_details) do
+  defp build_event(meeting_details, method) do
+    itip = method in [:itip_request, :itip_cancel]
+
     %{
       summary: Map.get(meeting_details, :title, dgettext("emails", "Meeting")),
       description: build_ics_description(meeting_details),
@@ -108,8 +153,8 @@ defmodule Tymeslot.Integrations.Calendar.IcsGenerator do
       location: determine_location(meeting_details),
       uid:
         "#{Map.get(meeting_details, :uid, UUID.uuid4())}@#{Application.get_env(:tymeslot, :email)[:domain]}",
-      organizer: format_organizer(meeting_details),
-      attendee: format_attendees(meeting_details),
+      organizer: format_organizer(meeting_details, itip),
+      attendee: format_attendees(meeting_details, itip),
       conference: conference_uri(meeting_details),
       status: Map.get(meeting_details, :status, "CONFIRMED")
     }
@@ -139,10 +184,16 @@ defmodule Tymeslot.Integrations.Calendar.IcsGenerator do
   #
   # `SCHEDULE-AGENT=CLIENT` on ORGANIZER/ATTENDEE is defence-in-depth per
   # RFC 6638 §7.1 for the same reason.
+  #
+  # `EMAIL_ICS_METHOD=request` is the opt-out from all of the above, for a
+  # deployment whose invitees are on Outlook / Microsoft 365: they then get
+  # `METHOD:REQUEST` / `METHOD:CANCEL` (see `itip?/1`), with no
+  # SCHEDULE-AGENT and `RSVP=FALSE`, so the meeting lands in their calendar
+  # without asking for a reply nobody reads.
   defp render_vcalendar(event, method, sequence) do
-    attendee_line = if event.attendee, do: "ATTENDEE;#{event.attendee}\n", else: ""
+    attendee_line = if event.attendee, do: "ATTENDEE#{event.attendee}\n", else: ""
     sequence_line = if is_integer(sequence), do: "SEQUENCE:#{sequence}\n", else: ""
-    method_line = if method == :none, do: "", else: "METHOD:PUBLISH\n"
+    method_line = method_line(method)
     status = status_for(method, event.status)
     lang = language_param()
     conference_line = build_conference_line(event.conference)
@@ -164,7 +215,7 @@ defmodule Tymeslot.Integrations.Calendar.IcsGenerator do
     #{sequence_line}SUMMARY#{tag_language(summary_text, lang)}:#{summary_text}
     DESCRIPTION#{tag_language(description_text, lang)}:#{description_text}
     LOCATION#{tag_language(location_text, lang)}:#{location_text}
-    #{conference_line}ORGANIZER;#{event.organizer}
+    #{conference_line}ORGANIZER#{event.organizer}
     #{attendee_line}STATUS:#{status}
     END:VEVENT
     END:VCALENDAR
@@ -213,11 +264,12 @@ defmodule Tymeslot.Integrations.Calendar.IcsGenerator do
   # First segment may be up to 75 octets; each continuation segment up to 74
   # octets (the leading SPACE occupies one octet of the 75-octet allowance).
   # We split at UTF-8 character boundaries so multi-byte codepoints are never
-  # torn in half.
+  # torn in half. Content lines end in CRLF (RFC 5545 §3.1), which strict iTIP
+  # consumers such as Exchange expect.
   defp fold_lines(ical_string) do
     ical_string
     |> String.split("\n")
-    |> Enum.map_join("\n", &fold_line/1)
+    |> Enum.map_join("\r\n", &fold_line/1)
   end
 
   defp fold_line(line) do
@@ -270,10 +322,18 @@ defmodule Tymeslot.Integrations.Calendar.IcsGenerator do
   # UTF-8 continuation bytes: 10xxxxxx
   defp continuation_byte?(byte), do: byte >= 0x80 and byte <= 0xBF
 
+  defp method_line(:none), do: ""
+
+  defp method_line(method) when method in [:itip_request, :itip_cancel],
+    do: "METHOD:#{itip_method_name(method)}\n"
+
+  defp method_line(_method), do: "METHOD:PUBLISH\n"
+
   defp status_for(:cancel, _status), do: "CANCELLED"
+  defp status_for(:itip_cancel, _status), do: "CANCELLED"
   defp status_for(_method, status), do: status
 
-  defp format_organizer(meeting_details) do
+  defp format_organizer(meeting_details, itip) do
     organizer_name = Map.get(meeting_details, :organizer_name)
 
     organizer_email =
@@ -283,21 +343,27 @@ defmodule Tymeslot.Integrations.Calendar.IcsGenerator do
         Application.get_env(:tymeslot, :email)[:from_email]
       )
 
-    "SCHEDULE-AGENT=CLIENT#{cn_param(organizer_name)}:mailto:#{organizer_email}"
+    "#{schedule_agent_param(itip)}#{cn_param(organizer_name)}:mailto:#{organizer_email}"
   end
 
-  defp format_attendees(meeting_details) do
+  defp format_attendees(meeting_details, itip) do
     attendee_email = Map.get(meeting_details, :attendee_email)
 
     case attendee_email do
       email when is_binary(email) and email != "" ->
         attendee_name = Map.get(meeting_details, :attendee_name)
-        "SCHEDULE-AGENT=CLIENT#{cn_param(attendee_name)}:mailto:#{email}"
+        "#{attendee_params(itip)}#{cn_param(attendee_name)}:mailto:#{email}"
 
       _other ->
         nil
     end
   end
+
+  defp schedule_agent_param(true), do: ""
+  defp schedule_agent_param(false), do: ";SCHEDULE-AGENT=CLIENT"
+
+  defp attendee_params(true), do: ";ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=FALSE"
+  defp attendee_params(false), do: ";SCHEDULE-AGENT=CLIENT"
 
   defp cn_param(name) when is_binary(name) and name != "" do
     quoted_name =
