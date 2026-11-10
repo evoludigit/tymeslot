@@ -45,6 +45,7 @@ defmodule Tymeslot.Integrations.HealthCheck.ResponseHandler do
   alias Tymeslot.Emails.EmailScheduler
   alias Tymeslot.Infrastructure.BreakerOutcome
   alias Tymeslot.Infrastructure.Logging.LogFormat
+  alias Tymeslot.Integrations.Calendar.ProviderConfig
   alias Tymeslot.Integrations.CalendarManagement
   alias Tymeslot.Integrations.HealthCheck.IntegrationHealthStateQueries
   alias Tymeslot.Integrations.HealthCheck.Monitor
@@ -161,7 +162,13 @@ defmodule Tymeslot.Integrations.HealthCheck.ResponseHandler do
           {:ok, any()} | {:error, any()}
         ) :: :ok
   def handle_check_result(type, integration, transition, health_state, check_result) do
-    integration = apply_permanent_auth_failure(type, integration, check_result)
+    integration =
+      if rejection_confirmed?(type, integration, health_state) do
+        apply_permanent_auth_failure(type, integration, check_result)
+      else
+        integration
+      end
+
     handle_transition(type, integration, transition, health_state)
   end
 
@@ -191,6 +198,25 @@ defmodule Tymeslot.Integrations.HealthCheck.ResponseHandler do
   end
 
   # Private Functions
+
+  # A password-based calendar's rejection is believed only once it has lasted
+  # `ReauthHandling.password_rejection_threshold/0` consecutive hard failures,
+  # this check included (`health_state` is already updated with it). Until then
+  # the failure only counts toward the badge like any other. OAuth providers,
+  # whose refused grant really is gone, and video integrations keep flagging
+  # on the first rejection.
+  defp rejection_confirmed?(:calendar, %{provider: provider}, %{
+         consecutive_hard_failures: failures
+       })
+       when is_integer(failures) do
+    if ProviderConfig.caldav_based?(provider) do
+      failures >= ReauthHandling.password_rejection_threshold()
+    else
+      true
+    end
+  end
+
+  defp rejection_confirmed?(_type, _integration, _health_state), do: true
 
   # Returns the integration as the rest of the check should see it: flagged
   # when the flag was written, untouched otherwise (including when the write
